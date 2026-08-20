@@ -1,0 +1,145 @@
+<?php
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
+$servername = "sql303.infinityfree.com";
+$username   = "if0_42611779";
+$password   = "AuLE5UWW4NS6MV";
+$dbname     = "if0_42611779_task";
+
+// Create connection
+$conn = new mysqli($servername, $username, $password, $dbname);
+
+// Check connection
+if ($conn->connect_error) {
+  die("Connection failed: " . $conn->connect_error);
+}
+
+// ------------------------------------------------------------------
+// إصلاح بنية الجدول تلقائيا (يشتغل مرة وحدة فعليًا، الباقي يتجاهلها بأمان)
+// ------------------------------------------------------------------
+
+// تحقق: هل عمود Id عنده Primary Key فعلاً؟
+$check = $conn->query("SHOW KEYS FROM user WHERE Key_name = 'PRIMARY'");
+
+if ($check && $check->num_rows == 0) {
+    // ما فيه Primary Key -> نصلح الجدول
+
+    // نفرغ الجدول أول (لازم لأن القيم الحالية لعمود Id كلها مكررة/صفر)
+    $conn->query("TRUNCATE TABLE user");
+
+    // نخلي Id يتزايد تلقائيًا ونضيف له Primary Key
+    $conn->query("ALTER TABLE user MODIFY Id INT NOT NULL AUTO_INCREMENT, ADD PRIMARY KEY (Id)");
+}
+
+// ------------------------------------------------------------------
+
+// Toggle status (حضور / غياب) - سطر واحد فقط
+if (isset($_GET['toggle_id'])) {
+    $id = intval($_GET['toggle_id']);
+
+    $stmt = $conn->prepare("UPDATE user SET Status = IF(Status = 1, 0, 1) WHERE Id = ?");
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+    $stmt->close();
+
+    header("Location: in.php");
+    exit();
+}
+
+// Delete single row - سطر واحد فقط
+if (isset($_GET['delete_id'])) {
+    $id = intval($_GET['delete_id']);
+
+    $stmt = $conn->prepare("DELETE FROM user WHERE Id = ?");
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+    $stmt->close();
+
+    header("Location: in.php");
+    exit();
+}
+
+// Delete all rows
+if (isset($_POST['delete_all'])) {
+    $conn->query("TRUNCATE TABLE user");
+    header("Location: in.php");
+    exit();
+}
+
+// Insert new record
+if (isset($_REQUEST['name']) && isset($_REQUEST['age'])) {
+    $name = $_REQUEST['name'];
+    $age  = $_REQUEST['age'];
+
+    $stmt = $conn->prepare("INSERT INTO user (Name, Age, Status) VALUES (?, ?, 0)");
+    $stmt->bind_param("si", $name, $age);
+
+    if ($stmt->execute()) {
+        echo "New record created successfully";
+    } else {
+        echo "Error: " . $stmt->error;
+    }
+    $stmt->close();
+}
+?>
+
+<style>
+  body { font-family: sans-serif; padding:100px; }
+  table { border-collapse: collapse; margin-top: 40px; }
+  th { background-color: #84CC16; }
+</style>
+
+<h2>HTML Forms</h2>
+
+<form action="in.php" method="post">
+  <label for="name">Name:</label>
+  <input type="text" id="name" name="name">
+  <label for="age">Age:</label>
+  <input type="number" id="age" name="age">
+  <input type="submit" value="Submit">
+</form>
+
+<br><hr><br>
+
+<?php
+$sql_select = "SELECT Id, Name, Age, Status FROM user";
+$result = $conn->query($sql_select);
+
+if ($result && $result->num_rows > 0) {
+    echo "<table border='1' cellpadding='8' cellspacing='0'>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Age</th>
+                <th>Status</th>
+                <th>Action</th>
+            </tr>";
+
+    while ($row = $result->fetch_assoc()) {
+        echo "<tr>
+                <td>" . htmlspecialchars($row["Id"]) . "</td>
+                <td>" . htmlspecialchars($row["Name"]) . "</td>
+                <td>" . htmlspecialchars($row["Age"]) . "</td>
+                <td>" . ($row["Status"] == 1 ? "<b style='color:green'>حضور</b>" : "<b style='color:#1F2937'>غياب</b>") . "</td>
+                <td>
+                   <a href='in.php?toggle_id=" . $row["Id"] . "'>
+                      <button type='button' style='cursor:pointer; padding: 5px 10px;'>Toggle</button>
+                   </a>
+                   <a href='in.php?delete_id=" . $row["Id"] . "' onclick=\"return confirm('هل أنت متأكد من حذف هذا السطر؟');\">
+                      <button type='button' style='cursor:pointer; padding: 5px 10px; background:#DC2626; color:white; border:none;'>حذف</button>
+                   </a>
+                </td>
+                </tr>";
+    }
+    echo "</table>";
+} else {
+    echo "0 results";
+}
+
+$conn->close();
+?>
+
+<form method="post">
+   <input type="submit" name="delete_all" value="Clear All Data" style="background:#1F2937; color:white; border:none; padding:8px; cursor:pointer;" onclick="return confirm('هل أنت متأكد من مسح جميع البيانات؟');">
+</form>
